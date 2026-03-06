@@ -22,58 +22,62 @@ async function generateArticle() {
     browser = await chromium.launch({ headless: true });
     const context = await browser.newContext({ 
       storageState: JSON.parse(process.env.NOTE_STATE),
+      // 💡 人間らしく見せるためのUser-Agent設定
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
       viewport: { width: 1280, height: 1000 } 
     });
     page = await context.newPage();
 
-    console.log("エディタへ直行中...");
-    await page.goto('https://note.com/notes/new?type=text', { waitUntil: 'networkidle', timeout: 60000 });
+    // 1. まずはトップページへ行き、セッションを「温める」
+    console.log("noteトップページへ移動中...");
+    await page.goto('https://note.com/', { waitUntil: 'networkidle', timeout: 60000 });
+    
+    // ログイン状態（ユーザーアイコンなど）が出るまで少し待つ
+    await page.waitForTimeout(5000);
 
-    // 💡 ロード画面の「...」が消え、タイトル入力欄が現れるまで最大 60 秒待機
-    console.log("エディタの完全読み込みを待機中...");
-    const titleArea = page.locator('h1[contenteditable="true"], .note-editor-title__input, textarea[placeholder*="タイトル"]').first();
-    await titleArea.waitFor({ state: 'visible', timeout: 60000 });
-    console.log("ロード完了。入力準備が整いました。");
-
-    // 入力前に一瞬待機してフォーカスを安定させる
+    // 2. トップページから「投稿」をクリックして遷移を開始（直接URLを叩かない）
+    console.log("トップページからエディタへ遷移を開始...");
+    const postButton = page.locator('header button[aria-label="投稿"], .a-split-button__right').first();
+    await postButton.click();
     await page.waitForTimeout(2000);
+    
+    const textOption = page.locator('a[href*="notes/new"], .o-navbarPrimary__postingButton').first();
+    await textOption.click();
 
-    console.log("入力シーケンス開始...");
-    // 直接タイトル欄をクリックしてフォーカス
+    // 3. 「3つの点」が消えるまで粘り強く待機
+    console.log("エディタの起動を待機中（3つの点が消えるのを待ちます）...");
+    
+    // 💡 修正の核心：タイトルの入力欄が現れるまで、最大90秒待つ
+    const titleArea = page.locator('h1[contenteditable="true"], .note-editor-title__input, textarea[placeholder*="タイトル"]').first();
+    
+    // タイムアウトを長めに設定し、その間3つの点がどうなっているか監視
+    await titleArea.waitFor({ state: 'visible', timeout: 90000 });
+    console.log("エディタの起動を確認しました。");
+
+    // 4. 入力シーケンス
+    await page.waitForTimeout(3000);
     await titleArea.click();
     await page.keyboard.type(title, { delay: 50 });
     
-    // Tabキーで本文へ移動
     await page.keyboard.press('Tab'); 
     await page.waitForTimeout(1000);
-    
-    // 本文を入力
     await page.keyboard.type(body, { delay: 10 });
+    
     await page.waitForTimeout(5000);
-
-    // 証拠写真1: 入力完了確認
     await page.screenshot({ path: 'input_check.png' });
-    console.log("📸 入力完了の証拠を撮影しました。");
 
+    // 5. 保存
     console.log("保存中...");
-    // Ctrl + S
     await page.keyboard.down('Control');
     await page.keyboard.press('s');
     await page.keyboard.up('Control');
-
-    // 物理ボタンも押す（より汎用的なクラス名で）
-    const saveButton = page.locator('.n-button--variant-primary, button:has-text("保存")').first();
-    if (await saveButton.isVisible()) {
-      await saveButton.click({ force: true });
-    }
-
-    // 保存通信が終わるのを十分待つ
-    console.log("保存の完了を待機しています...");
-    await page.waitForTimeout(15000); 
     
-    // 最終証拠写真
+    const saveButton = page.locator('.n-button--variant-primary, button:has-text("保存")').first();
+    if (await saveButton.isVisible()) await saveButton.click({ force: true });
+
+    await page.waitForTimeout(15000); 
     await page.screenshot({ path: 'final_check.png' });
-    console.log(`🎉 プロセス完遂: ${title}`);
+    console.log(`🎉 成功: ${title}`);
 
   } catch (e) {
     console.error("❌ エラー:", e.message);
