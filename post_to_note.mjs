@@ -1,9 +1,6 @@
 import { chromium } from 'playwright';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-/**
- * 1. 記事生成関数：Logic Link English Coach モード
- */
 async function generateArticle() {
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
   const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
@@ -63,10 +60,8 @@ Select one topic from:
   try {
     const result = await model.generateContent(prompt);
     const text = result.response.text().trim();
-    // 空行を排除しつつパース
     const lines = text.split('\n').filter(l => l.trim() !== "");
     
-    // 1行目をタイトルとして抽出
     const title = lines[0].replace(/[*#]/g, '').replace('タイトル：', '').trim();
     const bodyLines = lines.slice(1);
     
@@ -78,9 +73,6 @@ Select one topic from:
   }
 }
 
-/**
- * 2. 投稿実行ブロック：人間らしい入力シーケンス
- */
 (async () => {
   let browser;
   let page;
@@ -110,21 +102,47 @@ Select one topic from:
     await page.waitForTimeout(2000);
 
     console.log("本文を入力中（装飾トリガーを処理）...");
+    
+    let isFirstLine = true;
+    let prevWasHeading = false; // 直前の行が見出しだったかどうかのフラグ
+
     for (const line of bodyLines) {
-      if (line.startsWith('## ')) {
-        await page.keyboard.type('## ', { delay: 100 });
-        await page.waitForTimeout(1000);
-        await page.keyboard.type(line.replace('## ', ''));
-        await page.keyboard.press('Enter');
-      } else if (line.startsWith('> ')) {
-        await page.keyboard.type('> ', { delay: 100 });
-        await page.waitForTimeout(800);
-        await page.keyboard.type(line.replace('> ', ''));
-        await page.keyboard.press('Enter');
-      } else {
-        await page.keyboard.type(line, { delay: 10 });
-        await page.keyboard.press('Enter');
+      const isHeading = line.match(/^##\s*(.*)/);
+      const isQuote = line.match(/^>\s*(.*)/);
+
+      // 行を打ち始める前の「Enter」の制御（ご指定のルールを完全適用）
+      if (!isFirstLine) {
+        if (prevWasHeading) {
+          // 直前が見出しなら：追加のEnterは押さない（行末の1回のみで改行される）
+        } else {
+          // それ以外のすべての場合：追加でEnterを押し、空行を挟む（引用ブロックからの脱出も兼ねる）
+          await page.keyboard.press('Enter');
+        }
       }
+
+      if (isHeading) {
+        // 見出しの入力処理
+        await page.keyboard.type('##');
+        await page.keyboard.press('Space');
+        await page.waitForTimeout(1000); // 変換待ち
+        await page.keyboard.type(isHeading[1].trim(), { delay: 50 });
+        prevWasHeading = true;
+      } else if (isQuote) {
+        // 引用の入力処理
+        await page.keyboard.type('>');
+        await page.keyboard.press('Space');
+        await page.waitForTimeout(800); // 変換待ち
+        await page.keyboard.type(isQuote[1].trim(), { delay: 10 });
+        prevWasHeading = false;
+      } else {
+        // 平文の入力処理
+        await page.keyboard.type(line, { delay: 10 });
+        prevWasHeading = false;
+      }
+
+      // どのブロックであっても、打ち終わった後に必ず1回Enterを押す
+      await page.keyboard.press('Enter');
+      isFirstLine = false;
     }
 
     console.log("保存中...");
