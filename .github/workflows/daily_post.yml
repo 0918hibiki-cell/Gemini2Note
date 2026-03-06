@@ -21,7 +21,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          npm install
+          # 💡 npm install の後ろに必要な2つのパッケージ名を直接追記します
+          npm install playwright @google/generative-ai
           # Playwrightと必要なブラウザ（Chromium）をインストール
           npx playwright install chromium --with-deps
 
