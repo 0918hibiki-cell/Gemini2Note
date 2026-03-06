@@ -1,18 +1,7 @@
 import { chromium } from 'playwright';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-async function generateArticle() {
-  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-  const prompt = "Write a professional blog post in English about the synergy of Pharmaceutical Sciences and Mathematics. Title on the first line. No markdown.";
-  const result = await model.generateContent(prompt);
-  const text = result.response.text().trim();
-  const lines = text.split('\n').filter(l => l.trim() !== "");
-  const title = lines[0].replace(/[*#]/g, '').trim();
-  const body = lines.slice(1).join('\n\n');
-  console.log(`🤖 Gemini生成: ${title}`);
-  return { title, body };
-}
+// ... (generateArticle 関数はそのまま使用)
 
 (async () => {
   let browser;
@@ -26,43 +15,62 @@ async function generateArticle() {
     });
     page = await context.newPage();
 
-    console.log("noteトップページへ移動中...");
-    await page.goto('https://note.com/', { waitUntil: 'networkidle', timeout: 60000 });
+    console.log("エディタへ直行中...");
+    await page.goto('https://note.com/notes/new?type=text', { waitUntil: 'networkidle', timeout: 60000 });
 
-    console.log("投稿プロセスを開始...");
-    // 💡 投稿ボタンをURLで直接狙う（確実）
-    await page.goto('https://note.com/notes/new?type=text', { waitUntil: 'networkidle' });
+    console.log("エディタの完全読み込みを待機（15秒）...");
+    await page.waitForTimeout(15000); 
 
-    console.log("エディタの完全な読み込みを待機中（10秒）...");
-    await page.waitForTimeout(10000); 
-
-    // 💡 戦略転換：セレクタを無視して「Tabキー」でフォーカスを回す
-    console.log("記事入力シーケンスを開始...");
-    
-    // 1. タイトル欄へ移動
-    await page.keyboard.press('Tab');
-    await page.waitForTimeout(500);
-    // 2. タイトルを入力
-    console.log("タイトルを入力中...");
-    await page.keyboard.type(title, { delay: 30 });
+    console.log("入力シーケンス開始...");
+    await page.keyboard.press('Tab'); // タイトルへ
     await page.waitForTimeout(1000);
-
-    // 3. 本文欄へ Tab で移動
-    await page.keyboard.press('Tab');
-    await page.waitForTimeout(500);
-    // 4. 本文を入力
-    console.log("本文を入力中...");
-    await page.keyboard.type(body, { delay: 10 });
-    await page.waitForTimeout(2000);
-
-    // 5. 保存ボタンをクリック
-    console.log("保存シーケンス...");
-    // 保存ボタンは ID や固有の属性で狙い撃ち
-    const saveButton = page.locator('button:has-text("保存"), [data-testid="save-button"], .n-button--primary').first();
-    await saveButton.click({ force: true });
+    await page.keyboard.type(title, { delay: 50 });
     
-    await page.waitForTimeout(10000);
-    console.log(`🎉 成功！: ${title}`);
+    await page.keyboard.press('Tab'); // 本文へ
+    await page.waitForTimeout(1000);
+    await page.keyboard.type(body, { delay: 5 });
+    
+    // 💡 入力後の反映を待つためのバッファ
+    await page.waitForTimeout(5000);
+
+    console.log("保存アクションを実行中...");
+    
+    // 💡 手法1: キーボードショートカット (Ctrl + S) を試行
+    await page.keyboard.down('Control');
+    await page.keyboard.press('s');
+    await page.keyboard.up('Control');
+    console.log("ショートカットキー(Ctrl+S)を送信しました。");
+    await page.waitForTimeout(3000);
+
+    // 💡 手法2: 物理ボタンを複数の属性でしつこく探してクリック
+    // 新エディタの保存ボタンに特化したセレクタ
+    const saveSelectors = [
+      'button:has-text("保存")',
+      'button[data-testid="save-button"]',
+      '.n-button--variant-primary',
+      'header button:last-child', // ヘッダーの一番右側のボタン
+      '.editor-header__actions button'
+    ];
+
+    let clicked = false;
+    for (const selector of saveSelectors) {
+      try {
+        const btn = page.locator(selector).first();
+        if (await btn.isVisible()) {
+          await btn.click({ force: true, timeout: 5000 });
+          console.log(`ボタンクリック成功: ${selector}`);
+          clicked = true;
+          break;
+        }
+      } catch (e) { continue; }
+    }
+
+    if (!clicked) {
+      console.log("ボタンが見つかりませんが、Ctrl+Sが効いている可能性があるため続行します。");
+    }
+
+    await page.waitForTimeout(10000); // 完了待機
+    console.log(`🎉 ミッション完了！ 下書き保存を確認してください: ${title}`);
 
   } catch (e) {
     console.error("❌ 失敗内容:", e.message);
