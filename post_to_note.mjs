@@ -6,18 +6,22 @@ async function generateArticle() {
   const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
   
   const prompt = `
-    Role: Logic Link English Coach (Logical, Insightful, and Empathetic).
-    Target: Japanese business people (Beginner-Intermediate).
+    Role: Logic Link English Coach.
+    [Content] Logic-based business English (Pharmacy/Math metaphors).
     
-    [Content Strategy]
-    - Intro: Empathetic Japanese. Blame the problem on a "Logic Bug".
-    - Story: English Dialogue using "> ". Topic: Pharmacy/Math metaphors for business (e.g. Half-life, Compound interest).
-    - Deep Dive: Japanese scientific insight (No complex math, use one simple LaTeX if needed).
-
-    [Formatting Rules for note.com]
-    - Headings: Use "## " (with a space).
-    - Blockquote: Use "> " (with a space) for EACH line of dialogue.
-    - Title: Japanese (Problem x Scientific Term) on line 1.
+    [Strict Formatting Rules]
+    - Title: Japanese (Line 1).
+    - Headings: Use "## " for sections.
+    - Dialogue: Start ONLY the first line of the conversation with "> ". The rest of the dialogue lines should have NO prefix.
+    - Separators: Do NOT use "---". Use empty lines instead.
+    - Paid Line: Just text "[有料エリア：ここから下は100円]".
+    
+    [Structure]
+    Title
+    ## はじめに
+    ## Today's Story (Start with "> " on the first dialogue line)
+    ## 最重要フレーズ Top 3
+    ... (Paid contents below)
   `;
   
   const result = await model.generateContent(prompt);
@@ -31,59 +35,54 @@ async function generateArticle() {
   try {
     const { title, bodyLines } = await generateArticle();
     browser = await chromium.launch({ headless: true });
-    const context = await browser.newContext({ 
-      storageState: JSON.parse(process.env.NOTE_STATE),
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-      viewport: { width: 1280, height: 1000 }
-    });
+    const context = await browser.newContext({ storageState: JSON.parse(process.env.NOTE_STATE) });
     page = await context.newPage();
 
-    // 💡 1. トップページでセッションを「温める」
-    console.log("noteトップページへ移動中...");
-    await page.goto('https://note.com/', { waitUntil: 'networkidle', timeout: 60000 });
-    await page.waitForTimeout(5000);
-
-    // 💡 2. エディタへ移動（タイムアウトを90秒に設定）
-    console.log("エディタを起動中...");
-    await page.goto('https://note.com/notes/new?type=text', { waitUntil: 'networkidle', timeout: 90000 });
-    
+    await page.goto('https://note.com/notes/new?type=text', { waitUntil: 'networkidle', timeout: 60000 });
     const titleArea = page.locator('h1[contenteditable="true"], .note-editor-title__input, textarea[placeholder*="タイトル"]').first();
-    await titleArea.waitFor({ state: 'visible', timeout: 90000 });
+    await titleArea.waitFor({ state: 'visible' });
 
-    // 💡 3. 入力開始
-    console.log("入力シーケンス開始...");
+    // タイトル入力
     await titleArea.click();
-    await page.keyboard.type(title, { delay: 50 });
+    await page.keyboard.type(title);
     await page.keyboard.press('Enter');
     await page.waitForTimeout(2000);
+
+    console.log("Standardized Protocolによる入力開始...");
+    let inQuote = false;
 
     for (let i = 0; i < bodyLines.length; i++) {
       const line = bodyLines[i];
       const nextLine = bodyLines[i + 1] || "";
 
       if (line.startsWith('## ')) {
-        // 💡 修正：平文から見出しへ。2回改行してから ## 入力
-        await page.keyboard.press('Enter'); 
+        // 見出し前：二連改行でブロックを確実に分離
+        await page.keyboard.press('Enter');
+        await page.keyboard.press('Enter');
         await page.keyboard.type('## ', { delay: 100 });
         await page.waitForTimeout(800);
         await page.keyboard.type(line.replace('## ', ''));
-        // 💡 見出し確定後も2回Enterで平文へ戻る
+        // 見出し後：二連改行で平文へ
         await page.keyboard.press('Enter');
         await page.keyboard.press('Enter');
       } 
       else if (line.startsWith('> ')) {
+        // 引用開始のトリガー
+        inQuote = true;
         await page.keyboard.type('> ', { delay: 100 });
-        await page.waitForTimeout(400);
+        await page.waitForTimeout(500);
         await page.keyboard.type(line.replace('> ', ''));
         await page.keyboard.press('Enter');
-        // 💡 引用が終わる時に追加のEnterで平文へ戻る
-        if (!nextLine.startsWith('> ')) {
-          await page.keyboard.press('Enter');
-        }
       } 
       else {
         await page.keyboard.type(line);
         await page.keyboard.press('Enter');
+        
+        // 💡 引用ブロックの終了判定：次の行が見出しの場合、2回Enterで引用を脱出
+        if (inQuote && nextLine.startsWith('## ')) {
+          await page.keyboard.press('Enter');
+          inQuote = false;
+        }
       }
       await page.waitForTimeout(300);
     }
@@ -93,11 +92,10 @@ async function generateArticle() {
     await page.keyboard.press('s');
     await page.keyboard.up('Control');
     await page.waitForTimeout(10000);
-    console.log(`🎉 成功: ${title}`);
+    console.log(`🎉 完璧な装飾で保存完了: ${title}`);
 
   } catch (e) {
-    console.error("❌ エラー:", e.message);
-    if (page) await page.screenshot({ path: 'error.png', fullPage: true });
+    console.error("❌ 失敗:", e.message);
     process.exit(1);
   } finally {
     if (browser) await browser.close();
