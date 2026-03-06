@@ -1,11 +1,10 @@
 import { chromium } from 'playwright';
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import fs from 'fs';
 
 async function generateArticle() {
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
   const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-  const prompt = "Write a sophisticated blog post in English about Pharmaceutical Sciences and Mathematics. Focus on drug discovery. Title on the first line. No markdown.";
+  const prompt = "Write a professional blog post in English about the synergy of Pharmaceutical Sciences and Mathematics. The first line must be the title. No markdown.";
   const result = await model.generateContent(prompt);
   const text = result.response.text().trim();
   const lines = text.split('\n').filter(l => l.trim() !== "");
@@ -20,54 +19,61 @@ async function generateArticle() {
   let page;
   try {
     const { title, body } = await generateArticle();
-    browser = await chromium.launch();
+    browser = await chromium.launch({ headless: true });
     const context = await browser.newContext({ 
       storageState: JSON.parse(process.env.NOTE_STATE),
-      viewport: { width: 1920, height: 1080 } // 💡 画面を広くしてボタンを確実に出す
+      viewport: { width: 1280, height: 800 } 
     });
     page = await context.newPage();
 
     console.log("noteトップページへ移動中...");
     await page.goto('https://note.com/', { waitUntil: 'networkidle', timeout: 60000 });
 
-    // 💡 投稿ボタンを「URL」や「アイコンの形」で多角的に探す
-    console.log("投稿ボタンを探索中...");
-    const postButton = page.locator([
-      'a[href*="/posts/new"]', // 投稿画面への直接リンク
-      '.o-noteHeader__postButton',
-      'button:has(svg)', // ペンアイコンを持つボタン
-      'button:has-text("投稿")'
-    ].join(', ')).first();
+    // 1. 投稿ボタンをクリック
+    console.log("投稿ボタンをクリックしています...");
+    const postButton = page.locator('.o-noteHeader__postButton, button:has(svg), [aria-label="投稿"]').first();
+    await postButton.click({ force: true });
+    
+    // 💡 メニューが表示されるのを少し待つ（アニメーション対策）
+    await page.waitForTimeout(3000);
 
-    await postButton.waitFor({ state: 'attached', timeout: 20000 });
-    await postButton.click({ force: true }); // 💡 強制クリック
-
-    // 「テキスト」形式を選択
+    // 2. 「テキスト」形式をURLで確実に特定してクリック
     console.log("テキスト形式を選択中...");
-    const textOption = page.locator('a:has-text("テキスト"), [data-type="text"], a[href$="type=text"]').first();
-    await textOption.waitFor({ state: 'attached', timeout: 15000 });
-    await textOption.click({ force: true });
+    // 文字が「□」でも、リンク先のURLには "/posts/new?type=text" が含まれることを利用
+    const textLink = page.locator('a[href*="type=text"]').first();
+    
+    // もしリンクが見つからない場合の予備（メニューの1番目の項目）
+    if (await textLink.count() === 0) {
+      console.log("URLリンクが見つからないため、メニューの第1項目を試行します...");
+      await page.keyboard.press('ArrowDown');
+      await page.keyboard.press('Enter');
+    } else {
+      await textLink.click({ force: true });
+    }
 
-    // エディタ画面への遷移待ち
+    // 3. エディタ画面への遷移を待機
+    console.log("エディタの読み込みを待機中...");
     await page.waitForURL(/posts\/new/, { timeout: 30000 });
-    console.log("エディタ画面に到達しました。");
 
-    // 入力処理（プレースホルダーに頼らず、クラス名で指定）
+    // 4. タイトルと本文の入力
     const titleArea = page.locator('.note-editor-title__input, textarea[placeholder*="タイトル"]').first();
     await titleArea.waitFor({ state: 'visible', timeout: 20000 });
     await titleArea.fill(title);
     
-    const bodyArea = page.locator('.note-common-editor__editable');
+    const bodyArea = page.locator('.note-common-editor__editable').first();
     await bodyArea.fill(body);
+    console.log("入力が完了しました。");
+
+    // 5. 保存（文字に頼らず、ボタンの属性で指定）
+    console.log("下書き保存中...");
+    const saveButton = page.locator('button.n-button--primary, button:has-text("保存")').first();
+    await saveButton.click();
     
-    console.log("保存中...");
-    await page.click('button:has-text("保存")');
     await page.waitForTimeout(10000);
-    
-    console.log(`🎉 成功！: ${title}`);
+    console.log(`🎉 成功！ noteに下書き保存されました: ${title}`);
 
   } catch (e) {
-    console.error("❌ 失敗:", e.message);
+    console.error("❌ 失敗内容:", e.message);
     if (page) await page.screenshot({ path: 'error.png', fullPage: true });
     process.exit(1);
   } finally {
