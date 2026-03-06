@@ -1,4 +1,5 @@
 name: Daily Note Post
+
 on:
   schedule:
     - cron: '0 0 * * *' # 日本時間の午前9時に毎日実行
@@ -8,14 +9,21 @@ jobs:
   post:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      
-      - uses: actions/setup-node@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Install dependencies
+      - name: Install fonts and dependencies
         run: |
+          # 💡 スクリーンショットの文字化け（□）を防ぐために日本語フォントをインストール
+          sudo apt-get update
+          sudo apt-get install -y fonts-noto-cjk
+          
+          # プロジェクトの初期化と必要ライブラリのインストール
           npm init -y
           npm install playwright @google/generative-ai
           npx playwright install chromium
