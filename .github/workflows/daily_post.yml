@@ -1,0 +1,24 @@
+name: Daily Note Post
+on:
+  schedule:
+    - cron: '0 0 * * *' # 日本時間の午前9時に毎日実行
+  workflow_dispatch: # 手動でも実行できるようにするボタン
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install dependencies
+        run: |
+          npm init -y
+          npm install playwright @google/generative-ai
+          npx playwright install chromium
+      - name: Run posting script
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          NOTE_STATE: ${{ secrets.NOTE_STATE }}
+        run: node post_to_note.mjs
