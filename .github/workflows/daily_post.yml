@@ -44,3 +44,16 @@ jobs:
           # 💡 アスタリスクを使用して、input_check, final_check, error のすべてを拾います
           path: "*.png"
           retention-days: 5 # 保存期間（任意）
+
+  # (既存の「node post_to_note.mjs」などを実行するステップのすぐ下に追記します)
+      - name: Send Notification to LINE via GAS
+        if: always() # 成功しても失敗しても必ず実行して通知する
+        run: |
+          STATUS="成功 🎉"
+          if [ "${{ job.status }}" != "success" ]; then
+            STATUS="失敗 ❌ (GitHub Actionsのログを確認してください)"
+          fi
+          
+          curl -L -X POST -H "Content-Type: application/json" \
+          -d "{\"title\": \"🤖 英語学習記事システム\", \"message\": \"本日のnote下書き処理が終わりました。\", \"status\": \"$STATUS\"}" \
+          ${{ secrets.GAS_WEBHOOK_URL }}
