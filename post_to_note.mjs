@@ -1,5 +1,6 @@
 import { chromium } from 'playwright';
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import fs from 'fs'; // 💡 環境変数へ書き出すために追加
 
 async function generateArticle() {
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -69,6 +70,8 @@ C. [Choice C text]
 
 **正解は [Correct Letter]. [Correct Choice Text]** です。
 [Provide the logical reasoning for the correct answer in plain text without bold.]
+
+HASHTAGS: [Generate 5 relevant hashtags in Japanese separated by spaces, starting with #. e.g., #英語学習 #ロジカルシンキング #ビジネススキル]
 `;
 
   try {
@@ -77,10 +80,27 @@ C. [Choice C text]
     const lines = text.split('\n').map(l => l.trim());
     
     const title = lines[0].replace(/[*#]/g, '').replace('タイトル：', '').trim();
-    const bodyLines = lines.slice(1);
+    
+    // 💡 固定ハッシュタグ（後からいつでも変更可能です）
+    const presetTags = ['#英語学習', '#ビジネス英語', '#ロジカルシンキング', '#大人の勉強垢'];
+    let hashtags = [...presetTags];
+    
+    const hashtagIndex = lines.findIndex(l => l.startsWith('HASHTAGS:'));
+    let bodyEndIndex = lines.length;
+    
+    if (hashtagIndex !== -1) {
+      const tagStr = lines[hashtagIndex].replace('HASHTAGS:', '').trim();
+      const aiTags = tagStr.split(/\s+/).filter(t => t.startsWith('#'));
+      
+      // プリセットとAI生成タグを合体させ、重複を取り除く
+      hashtags = [...new Set([...presetTags, ...aiTags])];
+      bodyEndIndex = hashtagIndex;
+    }
+    
+    const bodyLines = lines.slice(1, bodyEndIndex);
     
     console.log(`🤖 Gemini生成成功: ${title}`);
-    return { title, bodyLines };
+    return { title, bodyLines, hashtags };
   } catch (e) {
     console.error("Gemini生成エラー:", e.message);
     throw e;
@@ -112,7 +132,7 @@ async function typeWithBold(page, text) {
   let browser;
   let page;
   try {
-    const { title, bodyLines } = await generateArticle();
+    const { title, bodyLines, hashtags } = await generateArticle();
     
     browser = await chromium.launch({ headless: true });
     const storageState = JSON.parse(process.env.NOTE_STATE);
@@ -137,7 +157,6 @@ async function typeWithBold(page, text) {
     await page.waitForTimeout(2000);
 
     console.log("本文を入力中...");
-    
     let isInQuote = false;
 
     for (let i = 0; i < bodyLines.length; i++) {
@@ -176,12 +195,27 @@ async function typeWithBold(page, text) {
       await page.keyboard.press('Enter');
     }
 
+    if (hashtags && hashtags.length > 0) {
+      console.log("ハッシュタグを入力中...");
+      await page.keyboard.press('Enter'); 
+      for (const tag of hashtags) {
+        await page.keyboard.type(tag, { delay: 50 });
+        await page.keyboard.press('Enter'); 
+        await page.waitForTimeout(500);
+      }
+    }
+
     console.log("保存中...");
     await page.keyboard.down('Control');
     await page.keyboard.press('s');
     await page.keyboard.up('Control');
     await page.waitForTimeout(10000);
     
+    // 💡 成功後、GitHub Actionsにタイトルを渡す
+    if (process.env.GITHUB_ENV) {
+      fs.appendFileSync(process.env.GITHUB_ENV, `ARTICLE_TITLE=${title}\n`);
+    }
+
     console.log(`🎉 完了しました！: ${title}`);
   } catch (e) {
     console.error("❌ 失敗:", e.message);
