@@ -9,26 +9,28 @@ async function generateArticle() {
     Role: Logic Link English Coach.
     Target: Japanese business people.
     
-    [Formatting Rules for Script]
-    - Use "[H]" at the start of a line for Middle Headings.
-    - Use "[B]" at the start of a line for Bold text.
-    - Title should be on the first line (no tags).
+    [Formatting Rules for Automation]
+    - Headings: Use "## " at the start of the line.
+    - Bold: Use "**" to surround bold words (e.g., **word**).
+    - Lists: Do NOT include numbers at the start of lines for lists (I will add them).
+    - Paid Line: Use "--- PAID LINE ---" as a separator.
+    - Title: First line should be the title ONLY (no headers).
     
     [Structure]
-    Title (Japanese)
-    [H] はじめに (Japanese Intro)
-    [H] Today's Story (English Dialogue)
-    [H] 最重要フレーズ Top 3
-    (List phrases here)
-    [H] 読解クイズ
-    
+    (Title in Japanese)
+    ## はじめに
+    (Intro in Japanese)
+    ## Today's Story
+    (Dialogue in English)
+    ## 最重要フレーズ Top 3
+    (Key phrases)
+    ## 読解クイズ
+    (Questions)
     --- PAID LINE ---
-    [有料エリア：ここから下は100円]
-
-    [H] 全文和訳
-    [H] 重要語彙フルリスト
-    [H] ロジカル・ディープダイブ
-    [H] クイズの解説
+    ## 全文和訳
+    ## 重要語彙フルリスト
+    ## ロジカル・ディープダイブ
+    ## クイズの解説
   `;
   
   const result = await model.generateContent(prompt);
@@ -37,7 +39,6 @@ async function generateArticle() {
   const title = lines[0].replace(/[*#]/g, '').trim();
   const bodyLines = lines.slice(1);
   
-  console.log(`🤖 Gemini生成成功: ${title}`);
   return { title, bodyLines };
 }
 
@@ -59,47 +60,30 @@ async function generateArticle() {
     const titleArea = page.locator('h1[contenteditable="true"], .note-editor-title__input, textarea[placeholder*="タイトル"]').first();
     await titleArea.waitFor({ state: 'visible', timeout: 60000 });
 
-    // タイトル入力
+    // タイトルの入力
     await titleArea.click();
     await page.keyboard.type(title);
     await page.keyboard.press('Enter');
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(2000);
 
-    console.log("本文を装飾しながら入力中...");
+    console.log("Markdownトリガーで本文を入力中...");
     for (const line of bodyLines) {
-      if (line.startsWith('[H]')) {
-        // 見出し(H2)のショートカット: Ctrl + Alt + 2
-        await page.keyboard.down('Control');
-        await page.keyboard.down('Alt');
-        await page.keyboard.press('2');
-        await page.keyboard.up('Alt');
-        await page.keyboard.up('Control');
-        await page.keyboard.type(line.replace('[H]', '').trim());
-      } else if (line.startsWith('[B]')) {
-        // 太字のショートカット: Ctrl + B
-        await page.keyboard.down('Control');
-        await page.keyboard.press('b');
-        await page.keyboard.up('Control');
-        await page.keyboard.type(line.replace('[B]', '').trim());
-        await page.keyboard.down('Control');
-        await page.keyboard.press('b'); // 解除
-        await page.keyboard.up('Control');
-      } else {
-        await page.keyboard.type(line);
-      }
+      // 💡 行頭の「## 」でnoteの見出し機能をトリガーする
+      await page.keyboard.type(line, { delay: 10 }); 
       await page.keyboard.press('Enter');
+      await page.waitForTimeout(500); // 1行ごとにエディタの反映を待つ
     }
 
-    // 保存処理
+    // 保存
     console.log("保存中...");
     await page.keyboard.down('Control');
     await page.keyboard.press('s');
     await page.keyboard.up('Control');
     await page.waitForTimeout(10000);
-    console.log(`🎉 完了！装飾された下書きを確認してください: ${title}`);
+    console.log(`🎉 完了しました！: ${title}`);
 
   } catch (e) {
-    console.error("❌ エラー:", e.message);
+    console.error("❌ 失敗:", e.message);
     process.exit(1);
   } finally {
     if (browser) await browser.close();
