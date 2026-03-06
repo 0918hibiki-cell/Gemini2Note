@@ -33,34 +33,42 @@ Select one topic from:
 (Dialogue in English: Use "> " for each speaker's line. Ensure the dialogue is engaging and relatable.)
 
 ## 最重要フレーズ Top 3
-(Format strictly as follows for each of the 3 phrases. DO NOT use numbers like 1., 2., 3.)
+(Format strictly as follows. Do not use numbers. Do not insert empty lines between the phrase and its explanation.)
 **[English Phrase]（[Japanese Meaning]）**
 [Short logical/scientific context or explanation in Japanese, 1-2 sentences.]
 
 ## 読解クイズ
-(3-choice question in Japanese based on the story.)
+(3-choice question in Japanese based on the story. Include the question and 3 options.)
 
 --- PAID LINE ---
 [有料エリア：ここから下は100円]
 
 ## 全文和訳
-(Natural Japanese translation of the dialogue.)
+(Natural Japanese translation of the dialogue. Use "> " for each speaker's line to match the English format.)
 
 ## 重要語彙フルリスト
-(Up to 7 phrases. Format strictly as: "1. **Word** : Meaning / Business usage tip". Do not use confusing numbering.)
+(Up to 7 phrases. Format strictly as follows. Do not use numbers. Do not insert empty lines between the word and its tip.)
+**[English Word] : [Japanese Meaning]**
+[Business usage tip or example in Japanese.]
 
 ## ロジカル・ディープダイブ
 (Japanese column: Soft scientific/logical insight. No complex formulas.)
 
 ## クイズの解説
-(First, restate the quiz question precisely using "> " at the beginning of the line.)
+(First, restate the quiz question AND ALL 3 CHOICES precisely using "> " at the beginning of each line.)
+> [Question text]
+> [Choice 1]
+> [Choice 2]
+> [Choice 3]
+
 (Then, provide the logical reasoning for the correct answer.)
 `;
 
   try {
     const result = await model.generateContent(prompt);
-    const text = result.response.text().trim();
-    const lines = text.split('\n').filter(l => l.trim() !== "");
+    // 改行コードを正規化し、AIが意図的に作った「空行」も配列として残す
+    const text = result.response.text().trim().replace(/\r/g, '');
+    const lines = text.split('\n').map(l => l.trim());
     
     const title = lines[0].replace(/[*#]/g, '').replace('タイトル：', '').trim();
     const bodyLines = lines.slice(1);
@@ -103,46 +111,48 @@ Select one topic from:
 
     console.log("本文を入力中（装飾トリガーを処理）...");
     
-    let isFirstLine = true;
-    let prevWasHeading = false; // 直前の行が見出しだったかどうかのフラグ
+    let isInQuote = false;
 
-    for (const line of bodyLines) {
+    for (let i = 0; i < bodyLines.length; i++) {
+      const line = bodyLines[i];
       const isHeading = line.match(/^##\s*(.*)/);
       const isQuote = line.match(/^>\s*(.*)/);
 
-      // 行を打ち始める前の「Enter」の制御（ご指定のルールを完全適用）
-      if (!isFirstLine) {
-        if (prevWasHeading) {
-          // 直前が見出しなら：追加のEnterは押さない（行末の1回のみで改行される）
-        } else {
-          // それ以外のすべての場合：追加でEnterを押し、空行を挟む（引用ブロックからの脱出も兼ねる）
-          await page.keyboard.press('Enter');
-        }
+      // 💡 引用ブロックからの脱出（今の行が引用じゃないのに、引用モードに入っていたら抜ける）
+      if (isInQuote && !isQuote) {
+        await page.keyboard.press('Enter'); 
+        await page.waitForTimeout(500);
+        isInQuote = false;
       }
 
       if (isHeading) {
-        // 見出しの入力処理
-        await page.keyboard.type('##');
-        await page.keyboard.press('Space');
+        await page.keyboard.type('## ');
         await page.waitForTimeout(1000); // 変換待ち
         await page.keyboard.type(isHeading[1].trim(), { delay: 50 });
-        prevWasHeading = true;
+        await page.keyboard.press('Enter');
       } else if (isQuote) {
-        // 引用の入力処理
-        await page.keyboard.type('>');
-        await page.keyboard.press('Space');
-        await page.waitForTimeout(800); // 変換待ち
+        if (!isInQuote) {
+          // 引用ブロックの開始
+          await page.keyboard.type('> ');
+          await page.waitForTimeout(800); // 変換待ち
+          isInQuote = true;
+        }
+        // 既に引用ブロック内にいる場合は `> ` を省いてテキストだけ打ち込む（分断を防ぐ）
         await page.keyboard.type(isQuote[1].trim(), { delay: 10 });
-        prevWasHeading = false;
+        await page.keyboard.press('Enter');
+      } else if (line === '') {
+        // AIが生成した空行をそのままEnterとして反映
+        await page.keyboard.press('Enter');
       } else {
-        // 平文の入力処理
+        // 通常テキスト
         await page.keyboard.type(line, { delay: 10 });
-        prevWasHeading = false;
+        await page.keyboard.press('Enter');
       }
+    }
 
-      // どのブロックであっても、打ち終わった後に必ず1回Enterを押す
+    // 最後に引用が開きっぱなしなら閉じる
+    if (isInQuote) {
       await page.keyboard.press('Enter');
-      isFirstLine = false;
     }
 
     console.log("保存中...");
