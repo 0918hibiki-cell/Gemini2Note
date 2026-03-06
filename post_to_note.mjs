@@ -6,41 +6,36 @@ async function generateArticle() {
   const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
   
   const prompt = `
-    Role: Logic Link English Coach (Logical, insightful, and professional).
+    Role: Logic Link English Coach.
     Target: Japanese business people (Beginner-Intermediate level).
     
-    [Important Instruction for Content]
-    1. Title: MUST be in Japanese. Combine a common business problem with a mathematical/logical/pharmaceutical term.
-    2. Format: Do NOT use markdown headers (#). Use **Bold Text** for sections.
+    [Instruction]
+    - Title: Create a catchy title in JAPANESE (Problem + Logic/Math term).
+    - Format: NO markdown headers (#). Use **Bold Text** for sections.
     
     [Structure]
     --- FREE AREA ---
     **タイトル** (Japanese Title)
-    **はじめに** (Japanese Intro: Hook the reader with a logical/scientific perspective).
-    **Today's Story** (English Dialogue: Middle school level + alpha, focus on logical thinking).
-    **最重要フレーズ Top 3** (3 key expressions with Japanese meanings).
+    **はじめに** (Japanese Intro: Logical perspective on daily life).
+    **Today's Story** (English Dialogue: Middle school level + alpha).
+    **最重要フレーズ Top 3** (Key expressions with Japanese meanings).
     **読解クイズ** (3-choice question in Japanese).
 
-    --- PAID LINE (Separator) ---
+    --- PAID LINE ---
     [有料エリア：ここから下は100円]
 
     **全文和訳** (Natural Japanese translation).
-    **重要語彙フルリスト** (Up to 7 phrases including the Top 3 with usage tips).
-    **ロジカル・ディープダイブ** (Japanese column: Pharmaceutical or Statistical insight. No complex math).
-    **クイズの解説** (Logical reasoning for the answer).
-
-    Tone: Sophisticated but encouraging. 
+    **重要語彙フルリスト** (Up to 7 phrases).
+    **ロジカル・ディープダイブ** (Japanese column: Pharmaceutical or Statistical insight).
+    **クイズの解説** (Logical reasoning).
   `;
   
   try {
     const result = await model.generateContent(prompt);
     const text = result.response.text().trim();
     const lines = text.split('\n').filter(l => l.trim() !== "");
-    
-    // タイトル（1行目）と本文を分離
-    const title = lines[0].replace(/[*#]/g, '').trim();
+    const title = lines[0].replace(/[*#]/g, '').replace('**タイトル**', '').trim();
     const body = lines.slice(1).join('\n\n');
-    
     console.log(`🤖 Gemini生成成功: ${title}`);
     return { title, body };
   } catch (e) {
@@ -57,18 +52,29 @@ async function generateArticle() {
     browser = await chromium.launch({ headless: true });
     const context = await browser.newContext({ 
       storageState: JSON.parse(process.env.NOTE_STATE),
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
       viewport: { width: 1280, height: 1000 } 
     });
     page = await context.newPage();
 
-    console.log("エディタへ直行中...");
-    await page.goto('https://note.com/notes/new?type=text', { waitUntil: 'networkidle', timeout: 60000 });
-    
-    // エディタの完全読み込みを待機
-    const titleArea = page.locator('h1[contenteditable="true"], .note-editor-title__input, textarea[placeholder*="タイトル"]').first();
-    await titleArea.waitFor({ state: 'visible', timeout: 60000 });
-    await page.waitForTimeout(3000);
+    // 💡 1. トップページ経由でセッションを温める（重要）
+    console.log("noteトップページへ移動中...");
+    await page.goto('https://note.com/', { waitUntil: 'networkidle', timeout: 60000 });
+    await page.waitForTimeout(5000);
 
+    // 💡 2. ボタン操作でエディタへ（直行URLより安定します）
+    console.log("エディタへ遷移中...");
+    const postButton = page.locator('header button[aria-label="投稿"], .a-split-button__right').first();
+    await postButton.click();
+    await page.waitForTimeout(2000);
+    const textOption = page.locator('a[href*="notes/new"], .o-navbarPrimary__postingButton').first();
+    await textOption.click();
+
+    // 💡 3. エディタの起動を粘り強く待つ
+    console.log("エディタの起動を待機中...");
+    const titleArea = page.locator('h1[contenteditable="true"], .note-editor-title__input, textarea[placeholder*="タイトル"]').first();
+    await titleArea.waitFor({ state: 'visible', timeout: 90000 });
+    
     console.log("入力シーケンス開始...");
     await titleArea.click();
     await page.keyboard.type(title, { delay: 50 });
@@ -88,9 +94,9 @@ async function generateArticle() {
     const saveButton = page.locator('.n-button--variant-primary, button:has-text("保存")').first();
     if (await saveButton.isVisible()) await saveButton.click({ force: true });
 
-    await page.waitForTimeout(10000); 
+    await page.waitForTimeout(15000); 
     await page.screenshot({ path: 'final_check.png' });
-    console.log(`🎉 完了しました！ noteを確認してください: ${title}`);
+    console.log(`🎉 完了しました！: ${title}`);
 
   } catch (e) {
     console.error("❌ 失敗:", e.message);
