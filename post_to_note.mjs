@@ -3,6 +3,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 async function generateArticle() {
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+  // モデル名や関数定義は過去の成功例に基づき完全に固定
   const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
   const prompt = `
@@ -30,13 +31,13 @@ Select one topic from:
 (Japanese Intro: Logical perspective on daily life or work).
 
 ## Today's Story
-(Dialogue in English: Use "> " for each speaker's line. Ensure the dialogue is engaging and relatable.)
+(Dialogue in English: Use "> " for each speaker's line. The speaker's name and the colon MUST be bolded, like "**Name:** ". Ensure the dialogue is engaging and relatable.)
 
 ## 最重要フレーズ Top 3
-(Format strictly as follows. Use numbers 1., 2., 3. ONLY the English phrase should be bolded.)
+(Format strictly as follows. ONLY the first item should start with "1. ". Do NOT write "2. ", "3. " for the others, because the editor will auto-number them. ONLY the English phrase should be bolded.)
 1. **[English Phrase]**: [Japanese Meaning] / [Short logical/scientific context or explanation in Japanese, 1-2 sentences]
-2. **[English Phrase]**: [Japanese Meaning] / [Short logical/scientific context or explanation in Japanese, 1-2 sentences]
-3. **[English Phrase]**: [Japanese Meaning] / [Short logical/scientific context or explanation in Japanese, 1-2 sentences]
+**[English Phrase]**: [Japanese Meaning] / [Short logical/scientific context or explanation in Japanese, 1-2 sentences]
+**[English Phrase]**: [Japanese Meaning] / [Short logical/scientific context or explanation in Japanese, 1-2 sentences]
 
 ## 読解クイズ
 (3-choice question in Japanese based on the story. Use A, B, C for the choices.)
@@ -49,13 +50,13 @@ C. [Choice C text]
 [有料エリア：ここから下は100円]
 
 ## 全文和訳
-(Natural Japanese translation of the dialogue. Use "> " for each speaker's line to match the English format.)
+(Natural Japanese translation of the dialogue. Use "> " for each speaker's line. The speaker's name and the colon MUST be bolded, like "**Name:** ", to match the English format.)
 
 ## 重要語彙フルリスト
-(Up to 7 phrases. Format strictly as follows. Use numbers. ONLY the English word should be bolded.)
+(Up to 7 phrases. Format strictly as follows. ONLY the first item should start with "1. ". Do NOT write "2. ", "3. " etc. for the others. ONLY the English word should be bolded.)
 1. **[English Word]**: [Japanese Meaning] / [Business usage tip or example in Japanese]
-2. **[English Word]**: [Japanese Meaning] / [Business usage tip or example in Japanese]
-(Continue for up to 7 words...)
+**[English Word]**: [Japanese Meaning] / [Business usage tip or example in Japanese]
+(Continue for up to 7 words, without typing numbers for them...)
 
 ## ロジカル・ディープダイブ
 (Japanese column: Soft scientific/logical insight. No complex formulas.)
@@ -87,13 +88,10 @@ C. [Choice C text]
   }
 }
 
-// 💡 太字(Ctrl+B)を処理しながらタイピングする関数
 async function typeWithBold(page, text) {
-  // AIが出力した "**テキスト**" を検知し、その部分だけ太字モードで打ち込む
   const parts = text.split('**');
   for (let i = 0; i < parts.length; i++) {
     if (i % 2 === 1 && parts[i].length > 0) {
-      // 奇数番目＝太字
       await page.keyboard.down('Control');
       await page.keyboard.press('b');
       await page.keyboard.up('Control');
@@ -101,13 +99,11 @@ async function typeWithBold(page, text) {
       
       await page.keyboard.type(parts[i], { delay: 10 });
       
-      // 太字解除
       await page.keyboard.down('Control');
       await page.keyboard.press('b');
       await page.keyboard.up('Control');
       await page.waitForTimeout(50);
     } else if (parts[i].length > 0) {
-      // 平文（「 です。」などの太字にしない部分もここで処理されます）
       await page.keyboard.type(parts[i], { delay: 10 });
     }
   }
@@ -150,7 +146,6 @@ async function typeWithBold(page, text) {
       const isHeading = line.match(/^##\s*(.*)/);
       const isQuote = line.match(/^>\s*(.*)/);
 
-      // 引用ブロックからの脱出処理
       if (isInQuote && !isQuote) {
         await page.keyboard.press('Enter'); 
         await page.waitForTimeout(500);
