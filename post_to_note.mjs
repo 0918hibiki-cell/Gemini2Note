@@ -19,7 +19,7 @@ Select one topic from:
 [Formatting Rules for note.com]
 - Headings: Use "## " (with a space) at the start of the line.
 - Quotes/Dialogue/Quiz Restatement: Use "> " (with a space) at the start of every line you want to quote.
-- Bold: Use "**" to surround bold words (e.g., **word**).
+- Bold: Use "**" to surround bold words (e.g., **word**). The script will parse this into actual bold text.
 - Paid Line: Use "--- PAID LINE ---" as a separator.
 - Title: First line should be the title ONLY (in Japanese, format: [Problem/Hook] × [Logic/Math/Science term]).
 
@@ -34,7 +34,7 @@ Select one topic from:
 
 ## 最重要フレーズ Top 3
 (Format strictly as follows. Do not use numbers. Do not insert empty lines between the phrase and its explanation.)
-**[English Phrase]（[Japanese Meaning]）**
+**[English Phrase] : [Japanese Meaning]**
 [Short logical/scientific context or explanation in Japanese, 1-2 sentences.]
 
 ## 読解クイズ
@@ -66,7 +66,6 @@ Select one topic from:
 
   try {
     const result = await model.generateContent(prompt);
-    // 改行コードを正規化し、AIが意図的に作った「空行」も配列として残す
     const text = result.response.text().trim().replace(/\r/g, '');
     const lines = text.split('\n').map(l => l.trim());
     
@@ -78,6 +77,31 @@ Select one topic from:
   } catch (e) {
     console.error("Gemini生成エラー:", e.message);
     throw e;
+  }
+}
+
+// 💡 太字(Ctrl+B)を処理しながらタイピングする関数
+async function typeWithBold(page, text) {
+  const parts = text.split('**');
+  for (let i = 0; i < parts.length; i++) {
+    if (i % 2 === 1 && parts[i].length > 0) {
+      // 奇数番目＝太字で囲まれた部分。Ctrl+Bを押して太字ON
+      await page.keyboard.down('Control');
+      await page.keyboard.press('b');
+      await page.keyboard.up('Control');
+      await page.waitForTimeout(50);
+      
+      await page.keyboard.type(parts[i], { delay: 10 });
+      
+      // 入力後、もう一度Ctrl+Bを押して太字OFF
+      await page.keyboard.down('Control');
+      await page.keyboard.press('b');
+      await page.keyboard.up('Control');
+      await page.waitForTimeout(50);
+    } else if (parts[i].length > 0) {
+      // 通常のテキスト
+      await page.keyboard.type(parts[i], { delay: 10 });
+    }
   }
 }
 
@@ -118,7 +142,6 @@ Select one topic from:
       const isHeading = line.match(/^##\s*(.*)/);
       const isQuote = line.match(/^>\s*(.*)/);
 
-      // 💡 引用ブロックからの脱出（今の行が引用じゃないのに、引用モードに入っていたら抜ける）
       if (isInQuote && !isQuote) {
         await page.keyboard.press('Enter'); 
         await page.waitForTimeout(500);
@@ -127,30 +150,26 @@ Select one topic from:
 
       if (isHeading) {
         await page.keyboard.type('## ');
-        await page.waitForTimeout(1000); // 変換待ち
-        await page.keyboard.type(isHeading[1].trim(), { delay: 50 });
+        await page.waitForTimeout(1000);
+        await typeWithBold(page, isHeading[1].trim()); // タイピング関数をかませる
         await page.keyboard.press('Enter');
       } else if (isQuote) {
         if (!isInQuote) {
-          // 引用ブロックの開始
           await page.keyboard.type('> ');
-          await page.waitForTimeout(800); // 変換待ち
+          await page.waitForTimeout(800);
+          isInQuote = false; // 💡 引用ブロックは継続させる
           isInQuote = true;
         }
-        // 既に引用ブロック内にいる場合は `> ` を省いてテキストだけ打ち込む（分断を防ぐ）
-        await page.keyboard.type(isQuote[1].trim(), { delay: 10 });
+        await typeWithBold(page, isQuote[1].trim()); // タイピング関数をかませる
         await page.keyboard.press('Enter');
       } else if (line === '') {
-        // AIが生成した空行をそのままEnterとして反映
         await page.keyboard.press('Enter');
       } else {
-        // 通常テキスト
-        await page.keyboard.type(line, { delay: 10 });
+        await typeWithBold(page, line); // 通常の行にもタイピング関数をかませる
         await page.keyboard.press('Enter');
       }
     }
 
-    // 最後に引用が開きっぱなしなら閉じる
     if (isInQuote) {
       await page.keyboard.press('Enter');
     }
