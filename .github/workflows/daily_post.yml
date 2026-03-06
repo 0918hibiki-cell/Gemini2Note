@@ -2,13 +2,14 @@ name: Daily Note Post
 
 on:
   schedule:
-    # 毎日 日本時間の朝7:00 (UTCの22:00) に実行
+    # 毎日 日本時間の朝7:00 (UTCの22:00) に自動実行
     - cron: '0 22 * * *'
-  workflow_dispatch: # これを残しておくと、手動でのテスト実行も引き続き可能です
+  workflow_dispatch: # 手動で「Run workflow」ボタンを押せるように残しておく
 
 jobs:
-  post:
+  generate-and-post:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -16,62 +17,25 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '20' # 安定版のNode.jsを使用
 
-      - name: Install fonts and dependencies
+      - name: Install dependencies
         run: |
-          # 💡 スクリーンショットの文字を正しく表示するために日本語フォントをインストール
-          sudo apt-get update
-          sudo apt-get install -y fonts-noto-cjk
-          
-          # ライブラリのインストール
-          npm init -y
-          npm install playwright @google/generative-ai
-          npx playwright install chromium
+          npm install
+          # Playwrightと必要なブラウザ（Chromium）をインストール
+          npx playwright install chromium --with-deps
 
-      - name: Run posting script
+      - name: Run Article Generation and Post
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           NOTE_STATE: ${{ secrets.NOTE_STATE }}
+          GAS_WEBHOOK_URL: ${{ secrets.GAS_WEBHOOK_URL }}
         run: node post_to_note.mjs
 
-      - name: Upload Debug Screenshots
-        # 💡 成功・失敗に関わらず（always）、すべてのPNG画像を保存します
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: debug-screenshots
-          # 💡 アスタリスクを使用して、input_check, final_check, error のすべてを拾います
-          path: "*.png"
-          retention-days: 5 # 保存期間（任意）
-
-  # (既存の「node post_to_note.mjs」などを実行するステップのすぐ下に追記します)
-      - name: Send Notification to LINE via GAS
-        if: always()
+      # スクリプトが途中でクラッシュした場合（失敗時）のみ実行されるエラー通知
+      - name: Send Error Notification
+        if: failure()
         run: |
-          STATUS="成功 🎉"
-          # post_to_note.mjs から渡されたタイトルを読み込む
-          TITLE="${{ env.ARTICLE_TITLE }}"
-          
-          # もし途中で失敗してタイトルが空だった場合の処理
-          if [ -z "$TITLE" ]; then
-            TITLE="（取得できませんでした）"
-          fi
-          
-          if [ "${{ job.status }}" != "success" ]; then
-            STATUS="失敗 ❌ (GitHub Actionsのログを確認してください)"
-          fi
-          
-          # jqコマンドで安全にメッセージを作成
-          PAYLOAD=$(jq -n \
-            --arg title "🤖 英語学習記事システム" \
-            --arg msg "本日のnote下書き処理が終わりました。
-            
-          【タイトル】
-          $TITLE" \
-            --arg status "$STATUS" \
-            '{title: $title, message: $msg, status: $status}')
-          
           curl -L -X POST -H "Content-Type: application/json" \
-          -d "$PAYLOAD" \
+          -d "{\"status\": \"失敗 ❌ (GitHub Actionsのログを確認してください)\", \"title\": \"⚠️ システムエラー発生\"}" \
           ${{ secrets.GAS_WEBHOOK_URL }}
