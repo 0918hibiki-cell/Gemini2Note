@@ -7,48 +7,45 @@ async function generateArticle() {
   
   const prompt = `
     Role: Logic Link English Coach.
-    Target: Japanese business people (Beginner-Intermediate level).
+    Target: Japanese business people.
     
-    [Instruction]
-    - Title: Create a catchy title in JAPANESE (Problem + Logic/Math term).
-    - Format: NO markdown headers (#). Use **Bold Text** for sections.
+    [Formatting Rules for Script]
+    - Use "[H]" at the start of a line for Middle Headings.
+    - Use "[B]" at the start of a line for Bold text.
+    - Title should be on the first line (no tags).
     
     [Structure]
-    --- FREE AREA ---
-    **タイトル** (Japanese Title)
-    **はじめに** (Japanese Intro: Logical perspective on daily life).
-    **Today's Story** (English Dialogue: Middle school level + alpha).
-    **最重要フレーズ Top 3** (Key expressions with Japanese meanings).
-    **読解クイズ** (3-choice question in Japanese).
-
+    Title (Japanese)
+    [H] はじめに (Japanese Intro)
+    [H] Today's Story (English Dialogue)
+    [H] 最重要フレーズ Top 3
+    (List phrases here)
+    [H] 読解クイズ
+    
     --- PAID LINE ---
     [有料エリア：ここから下は100円]
 
-    **全文和訳** (Natural Japanese translation).
-    **重要語彙フルリスト** (Up to 7 phrases).
-    **ロジカル・ディープダイブ** (Japanese column: Pharmaceutical or Statistical insight).
-    **クイズの解説** (Logical reasoning).
+    [H] 全文和訳
+    [H] 重要語彙フルリスト
+    [H] ロジカル・ディープダイブ
+    [H] クイズの解説
   `;
   
-  try {
-    const result = await model.generateContent(prompt);
-    const text = result.response.text().trim();
-    const lines = text.split('\n').filter(l => l.trim() !== "");
-    const title = lines[0].replace(/[*#]/g, '').replace('**タイトル**', '').trim();
-    const body = lines.slice(1).join('\n\n');
-    console.log(`🤖 Gemini生成成功: ${title}`);
-    return { title, body };
-  } catch (e) {
-    console.error("Gemini生成エラー:", e.message);
-    throw e;
-  }
+  const result = await model.generateContent(prompt);
+  const text = result.response.text().trim();
+  const lines = text.split('\n').filter(l => l.trim() !== "");
+  const title = lines[0].replace(/[*#]/g, '').trim();
+  const bodyLines = lines.slice(1);
+  
+  console.log(`🤖 Gemini生成成功: ${title}`);
+  return { title, bodyLines };
 }
 
 (async () => {
   let browser;
   let page;
   try {
-    const { title, body } = await generateArticle();
+    const { title, bodyLines } = await generateArticle();
     browser = await chromium.launch({ headless: true });
     const context = await browser.newContext({ 
       storageState: JSON.parse(process.env.NOTE_STATE),
@@ -57,50 +54,52 @@ async function generateArticle() {
     });
     page = await context.newPage();
 
-    // 💡 1. トップページ経由でセッションを温める（重要）
-    console.log("noteトップページへ移動中...");
-    await page.goto('https://note.com/', { waitUntil: 'networkidle', timeout: 60000 });
-    await page.waitForTimeout(5000);
-
-    // 💡 2. ボタン操作でエディタへ（直行URLより安定します）
-    console.log("エディタへ遷移中...");
-    const postButton = page.locator('header button[aria-label="投稿"], .a-split-button__right').first();
-    await postButton.click();
-    await page.waitForTimeout(2000);
-    const textOption = page.locator('a[href*="notes/new"], .o-navbarPrimary__postingButton').first();
-    await textOption.click();
-
-    // 💡 3. エディタの起動を粘り強く待つ
-    console.log("エディタの起動を待機中...");
+    console.log("エディタへ移動中...");
+    await page.goto('https://note.com/notes/new?type=text', { waitUntil: 'networkidle' });
     const titleArea = page.locator('h1[contenteditable="true"], .note-editor-title__input, textarea[placeholder*="タイトル"]').first();
-    await titleArea.waitFor({ state: 'visible', timeout: 90000 });
-    
-    console.log("入力シーケンス開始...");
-    await titleArea.click();
-    await page.keyboard.type(title, { delay: 50 });
-    
-    await page.keyboard.press('Tab'); 
-    await page.waitForTimeout(1000);
-    await page.keyboard.type(body, { delay: 10 });
-    
-    await page.waitForTimeout(5000);
-    await page.screenshot({ path: 'input_check.png' });
+    await titleArea.waitFor({ state: 'visible', timeout: 60000 });
 
+    // タイトル入力
+    await titleArea.click();
+    await page.keyboard.type(title);
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(1000);
+
+    console.log("本文を装飾しながら入力中...");
+    for (const line of bodyLines) {
+      if (line.startsWith('[H]')) {
+        // 見出し(H2)のショートカット: Ctrl + Alt + 2
+        await page.keyboard.down('Control');
+        await page.keyboard.down('Alt');
+        await page.keyboard.press('2');
+        await page.keyboard.up('Alt');
+        await page.keyboard.up('Control');
+        await page.keyboard.type(line.replace('[H]', '').trim());
+      } else if (line.startsWith('[B]')) {
+        // 太字のショートカット: Ctrl + B
+        await page.keyboard.down('Control');
+        await page.keyboard.press('b');
+        await page.keyboard.up('Control');
+        await page.keyboard.type(line.replace('[B]', '').trim());
+        await page.keyboard.down('Control');
+        await page.keyboard.press('b'); // 解除
+        await page.keyboard.up('Control');
+      } else {
+        await page.keyboard.type(line);
+      }
+      await page.keyboard.press('Enter');
+    }
+
+    // 保存処理
     console.log("保存中...");
     await page.keyboard.down('Control');
     await page.keyboard.press('s');
     await page.keyboard.up('Control');
-
-    const saveButton = page.locator('.n-button--variant-primary, button:has-text("保存")').first();
-    if (await saveButton.isVisible()) await saveButton.click({ force: true });
-
-    await page.waitForTimeout(15000); 
-    await page.screenshot({ path: 'final_check.png' });
-    console.log(`🎉 完了しました！: ${title}`);
+    await page.waitForTimeout(10000);
+    console.log(`🎉 完了！装飾された下書きを確認してください: ${title}`);
 
   } catch (e) {
-    console.error("❌ 失敗:", e.message);
-    if (page) await page.screenshot({ path: 'error.png', fullPage: true });
+    console.error("❌ エラー:", e.message);
     process.exit(1);
   } finally {
     if (browser) await browser.close();
