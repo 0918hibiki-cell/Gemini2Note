@@ -12,7 +12,7 @@ async function generateArticle() {
     [Content Strategy]
     - Intro: Empathetic Japanese. Blame the problem on a "Logic Bug".
     - Story: English Dialogue using "> ". Topic: Pharmacy/Math metaphors for business (e.g. Half-life, Compound interest).
-    - Deep Dive: Japanese scientific insight (No complex math, use soft logical models).
+    - Deep Dive: Japanese scientific insight (No complex math, use one simple LaTeX if needed).
 
     [Formatting Rules for note.com]
     - Headings: Use "## " (with a space).
@@ -31,31 +31,43 @@ async function generateArticle() {
   try {
     const { title, bodyLines } = await generateArticle();
     browser = await chromium.launch({ headless: true });
-    const context = await browser.newContext({ storageState: JSON.parse(process.env.NOTE_STATE) });
+    const context = await browser.newContext({ 
+      storageState: JSON.parse(process.env.NOTE_STATE),
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+      viewport: { width: 1280, height: 1000 }
+    });
     page = await context.newPage();
 
-    await page.goto('https://note.com/notes/new?type=text', { waitUntil: 'networkidle' });
-    const titleArea = page.locator('h1[contenteditable="true"], .note-editor-title__input, textarea[placeholder*="タイトル"]').first();
-    await titleArea.waitFor({ state: 'visible' });
+    // 💡 1. トップページでセッションを「温める」
+    console.log("noteトップページへ移動中...");
+    await page.goto('https://note.com/', { waitUntil: 'networkidle', timeout: 60000 });
+    await page.waitForTimeout(5000);
 
-    // タイトル入力
+    // 💡 2. エディタへ移動（タイムアウトを90秒に設定）
+    console.log("エディタを起動中...");
+    await page.goto('https://note.com/notes/new?type=text', { waitUntil: 'networkidle', timeout: 90000 });
+    
+    const titleArea = page.locator('h1[contenteditable="true"], .note-editor-title__input, textarea[placeholder*="タイトル"]').first();
+    await titleArea.waitFor({ state: 'visible', timeout: 90000 });
+
+    // 💡 3. 入力開始
+    console.log("入力シーケンス開始...");
     await titleArea.click();
     await page.keyboard.type(title, { delay: 50 });
     await page.keyboard.press('Enter');
     await page.waitForTimeout(2000);
 
-    console.log("ダブル・エンター・プロトコルで入力中...");
     for (let i = 0; i < bodyLines.length; i++) {
       const line = bodyLines[i];
       const nextLine = bodyLines[i + 1] || "";
 
       if (line.startsWith('## ')) {
-        // 見出し入力の前に改行を入れてブロックを分離
-        await page.keyboard.press('Enter');
+        // 💡 修正：平文から見出しへ。2回改行してから ## 入力
+        await page.keyboard.press('Enter'); 
         await page.keyboard.type('## ', { delay: 100 });
-        await page.waitForTimeout(700);
+        await page.waitForTimeout(800);
         await page.keyboard.type(line.replace('## ', ''));
-        // 💡 稲福さんの発見：見出しの後は2回Enterで平文に戻る
+        // 💡 見出し確定後も2回Enterで平文へ戻る
         await page.keyboard.press('Enter');
         await page.keyboard.press('Enter');
       } 
@@ -64,8 +76,7 @@ async function generateArticle() {
         await page.waitForTimeout(400);
         await page.keyboard.type(line.replace('> ', ''));
         await page.keyboard.press('Enter');
-        
-        // 💡 稲福さんの発見：引用ブロックの最後は追加のEnterで平文に戻る
+        // 💡 引用が終わる時に追加のEnterで平文へ戻る
         if (!nextLine.startsWith('> ')) {
           await page.keyboard.press('Enter');
         }
@@ -82,10 +93,11 @@ async function generateArticle() {
     await page.keyboard.press('s');
     await page.keyboard.up('Control');
     await page.waitForTimeout(10000);
-    console.log(`🎉 完璧な体裁で保存完了: ${title}`);
+    console.log(`🎉 成功: ${title}`);
 
   } catch (e) {
     console.error("❌ エラー:", e.message);
+    if (page) await page.screenshot({ path: 'error.png', fullPage: true });
     process.exit(1);
   } finally {
     if (browser) await browser.close();
