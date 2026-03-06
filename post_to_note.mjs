@@ -1,69 +1,52 @@
 import { chromium } from 'playwright';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// 1. Geminiで記事を生成（エラーハンドリングを強化）
 async function generateArticle() {
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
   
-  // 2026年時点で最も安定しているモデルを指定（新しいキーなら2.0が通るはずです）
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+  // 💡 モデル名を「gemini-1.5-flash」に変更。これが最もクォータ（枠）が安定しています。
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
   
   const prompt = `
-    Write a short, insightful blog post in English. 
-    Topic: The intersection of Pharmaceutical Sciences and Mathematical Modeling in 2026.
-    Target: International students and researchers.
-    Format: Start with the title on the first line, followed by the body. 
-    Tone: Professional yet engaging, reflecting a logical and scientific perspective.
+    Write an insightful blog post in English. 
+    Topic: The intersection of Pharmaceutical Sciences and Mathematics. 
+    Focus on how logical modeling helps drug discovery.
+    Keep it professional and academic for Kyoto University students.
+    Ensure the first line is the title.
   `;
   
   try {
     const result = await model.generateContent(prompt);
     const text = result.response.text().trim();
-    
-    // Markdownの装飾（# タイトル）などを取り除く処理
-    const lines = text.split('\n').filter(line => line.trim() !== "");
-    const title = lines[0].replace(/#/g, '').trim();
-    const body = lines.slice(1).join('\n\n');
-    
-    return { title, body };
-  } catch (error) {
-    console.error("Gemini生成エラー:", error.message);
-    throw error;
+    const lines = text.split('\n').filter(l => l.trim() !== "");
+    return { title: lines[0].replace(/#/g, '').trim(), body: lines.slice(1).join('\n\n') };
+  } catch (e) {
+    console.error("Gemini Error:", e.message);
+    throw e;
   }
 }
 
-// 2. noteに投稿
 (async () => {
   let browser;
   try {
     const { title, body } = await generateArticle();
-    
-    // ブラウザの起動（GitHub Actions上で動くための設定）
-    browser = await chromium.launch({ headless: true });
+    browser = await chromium.launch();
     const storageState = JSON.parse(process.env.NOTE_STATE);
     const context = await browser.newContext({ storageState });
     const page = await context.newPage();
 
-    console.log("noteの投稿画面へ移動中...");
+    console.log("note投稿画面へ...");
     await page.goto('https://note.com/posts/new');
-    
-    // タイトルと本文を入力（確実に要素が現れるまで待機）
     await page.waitForSelector('.note-editor-title textarea');
     await page.fill('.note-editor-title textarea', title);
-    
-    await page.waitForSelector('.note-common-editor__editable');
     await page.fill('.note-common-editor__editable', body);
     
-    // 下書き保存ボタンをクリック
-    console.log("下書きを保存しています...");
+    console.log("下書き保存中...");
     await page.click('button:has-text("保存")');
-    
-    // 保存完了の目安として少し待機
     await page.waitForTimeout(5000);
-    
-    console.log(`✅ 成功: 記事「${title}」を下書き保存しました！`);
-  } catch (error) {
-    console.error("❌ 実行失敗:", error);
+    console.log(`✅ 成功: ${title}`);
+  } catch (e) {
+    console.error("❌ 失敗:", e);
     process.exit(1);
   } finally {
     if (browser) await browser.close();
