@@ -18,7 +18,7 @@ Select one topic from:
 
 [Formatting Rules for note.com]
 - Headings: Use "## " (with a space) at the start of the line.
-- Quotes/Dialogue/Quiz Restatement: Use "> " (with a space) at the start of every line you want to quote.
+- Quotes/Dialogue: Use "> " (with a space) at the start of every line you want to quote.
 - Bold: Use "**" to surround bold words (e.g., **word**). The script will parse this into actual bold text.
 - Paid Line: Use "--- PAID LINE ---" as a separator.
 - Title: First line should be the title ONLY (in Japanese, format: [Problem/Hook] × [Logic/Math/Science term]).
@@ -33,12 +33,17 @@ Select one topic from:
 (Dialogue in English: Use "> " for each speaker's line. Ensure the dialogue is engaging and relatable.)
 
 ## 最重要フレーズ Top 3
-(Format strictly as follows. Do not use numbers. Do not insert empty lines between the phrase and its explanation.)
-**[English Phrase] : [Japanese Meaning]**
-[Short logical/scientific context or explanation in Japanese, 1-2 sentences.]
+(Format strictly as follows. Use numbers 1., 2., 3. ONLY the English phrase should be bolded.)
+1. **[English Phrase]**: [Japanese Meaning] / [Short logical/scientific context or explanation in Japanese, 1-2 sentences]
+2. **[English Phrase]**: [Japanese Meaning] / [Short logical/scientific context or explanation in Japanese, 1-2 sentences]
+3. **[English Phrase]**: [Japanese Meaning] / [Short logical/scientific context or explanation in Japanese, 1-2 sentences]
 
 ## 読解クイズ
-(3-choice question in Japanese based on the story. Include the question and 3 options.)
+(3-choice question in Japanese based on the story. Use A, B, C for the choices.)
+[Question text]
+A. [Choice A text]
+B. [Choice B text]
+C. [Choice C text]
 
 --- PAID LINE ---
 [有料エリア：ここから下は100円]
@@ -47,21 +52,23 @@ Select one topic from:
 (Natural Japanese translation of the dialogue. Use "> " for each speaker's line to match the English format.)
 
 ## 重要語彙フルリスト
-(Up to 7 phrases. Format strictly as follows. Do not use numbers. Do not insert empty lines between the word and its tip.)
-**[English Word] : [Japanese Meaning]**
-[Business usage tip or example in Japanese.]
+(Up to 7 phrases. Format strictly as follows. Use numbers. ONLY the English word should be bolded.)
+1. **[English Word]**: [Japanese Meaning] / [Business usage tip or example in Japanese]
+2. **[English Word]**: [Japanese Meaning] / [Business usage tip or example in Japanese]
+(Continue for up to 7 words...)
 
 ## ロジカル・ディープダイブ
 (Japanese column: Soft scientific/logical insight. No complex formulas.)
 
 ## クイズの解説
-(First, restate the quiz question AND ALL 3 CHOICES precisely using "> " at the beginning of each line.)
+(Format strictly as follows. Restate the question and choices A, B, C using "> ".)
 > [Question text]
-> [Choice 1]
-> [Choice 2]
-> [Choice 3]
+> A. [Choice A text]
+> B. [Choice B text]
+> C. [Choice C text]
 
-(Then, provide the logical reasoning for the correct answer.)
+**正解は [Correct Letter]. [Correct Choice Text]** です。
+[Provide the logical reasoning for the correct answer in plain text without bold.]
 `;
 
   try {
@@ -82,10 +89,11 @@ Select one topic from:
 
 // 💡 太字(Ctrl+B)を処理しながらタイピングする関数
 async function typeWithBold(page, text) {
+  // AIが出力した "**テキスト**" を検知し、その部分だけ太字モードで打ち込む
   const parts = text.split('**');
   for (let i = 0; i < parts.length; i++) {
     if (i % 2 === 1 && parts[i].length > 0) {
-      // 奇数番目＝太字で囲まれた部分。Ctrl+Bを押して太字ON
+      // 奇数番目＝太字
       await page.keyboard.down('Control');
       await page.keyboard.press('b');
       await page.keyboard.up('Control');
@@ -93,13 +101,13 @@ async function typeWithBold(page, text) {
       
       await page.keyboard.type(parts[i], { delay: 10 });
       
-      // 入力後、もう一度Ctrl+Bを押して太字OFF
+      // 太字解除
       await page.keyboard.down('Control');
       await page.keyboard.press('b');
       await page.keyboard.up('Control');
       await page.waitForTimeout(50);
     } else if (parts[i].length > 0) {
-      // 通常のテキスト
+      // 平文（「 です。」などの太字にしない部分もここで処理されます）
       await page.keyboard.type(parts[i], { delay: 10 });
     }
   }
@@ -133,7 +141,7 @@ async function typeWithBold(page, text) {
     await page.keyboard.press('Enter');
     await page.waitForTimeout(2000);
 
-    console.log("本文を入力中（装飾トリガーを処理）...");
+    console.log("本文を入力中...");
     
     let isInQuote = false;
 
@@ -142,6 +150,7 @@ async function typeWithBold(page, text) {
       const isHeading = line.match(/^##\s*(.*)/);
       const isQuote = line.match(/^>\s*(.*)/);
 
+      // 引用ブロックからの脱出処理
       if (isInQuote && !isQuote) {
         await page.keyboard.press('Enter'); 
         await page.waitForTimeout(500);
@@ -151,21 +160,20 @@ async function typeWithBold(page, text) {
       if (isHeading) {
         await page.keyboard.type('## ');
         await page.waitForTimeout(1000);
-        await typeWithBold(page, isHeading[1].trim()); // タイピング関数をかませる
+        await typeWithBold(page, isHeading[1].trim());
         await page.keyboard.press('Enter');
       } else if (isQuote) {
         if (!isInQuote) {
           await page.keyboard.type('> ');
           await page.waitForTimeout(800);
-          isInQuote = false; // 💡 引用ブロックは継続させる
-          isInQuote = true;
+          isInQuote = true; 
         }
-        await typeWithBold(page, isQuote[1].trim()); // タイピング関数をかませる
+        await typeWithBold(page, isQuote[1].trim());
         await page.keyboard.press('Enter');
       } else if (line === '') {
         await page.keyboard.press('Enter');
       } else {
-        await typeWithBold(page, line); // 通常の行にもタイピング関数をかませる
+        await typeWithBold(page, line);
         await page.keyboard.press('Enter');
       }
     }
