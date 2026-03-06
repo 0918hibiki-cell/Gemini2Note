@@ -5,7 +5,7 @@ async function generateArticle() {
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
   
   // 💡 モデル名を「gemini-1.5-flash」に変更。これが最もクォータ（枠）が安定しています。
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
   
   const prompt = `
     Write an insightful blog post in English. 
