@@ -21,7 +21,7 @@ Select one topic from:
 - Quotes/Dialogue: Use "> " (with a space) at the start of every line you want to quote.
 - Bold: Use "**" to surround bold words (e.g., **word**). The script will parse this into actual bold text.
 - Paid Line: Use "--- PAID LINE ---" as a separator.
-- Title: First line should be the title ONLY (in Japanese, format: [Problem/Hook] × [Logic/Math/Science term]).
+- Title: First line should be the title ONLY. Use a compelling question format in Japanese (e.g., "なぜ「プラセボ効果」が英語の習得を加速させるのか？"). Do NOT use brackets like [ ] or ×.
 
 [Structure]
 (Title in Japanese)
@@ -57,7 +57,7 @@ C. [Choice C text]
 **[English Word]**: [Japanese Meaning] / [Business usage tip or example in Japanese]
 (Continue for up to 7 words, without typing numbers for them...)
 
-## ロジカル・ディープダイブ
+## 【コラム】[Generate an insightful Japanese title for this column]
 (Japanese column: Soft scientific/logical insight. No complex formulas.)
 
 ## クイズの解説
