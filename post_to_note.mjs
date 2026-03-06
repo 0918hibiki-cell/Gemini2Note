@@ -4,7 +4,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 // 1. Geminiで記事を生成
 async function generateArticle() {
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
   
   // Hibikiさんの興味関心に基づいたプロンプト
   const prompt = "Write a short blog post in English about the intersection of Pharmaceutical Sciences and Mathematics. Focus on how logical modeling helps drug discovery. Keep it insightful for international students. Include a title at the top.";
