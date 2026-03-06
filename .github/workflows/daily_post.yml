@@ -47,13 +47,31 @@ jobs:
 
   # (既存の「node post_to_note.mjs」などを実行するステップのすぐ下に追記します)
       - name: Send Notification to LINE via GAS
-        if: always() # 成功しても失敗しても必ず実行して通知する
+        if: always()
         run: |
           STATUS="成功 🎉"
+          # post_to_note.mjs から渡されたタイトルを読み込む
+          TITLE="${{ env.ARTICLE_TITLE }}"
+          
+          # もし途中で失敗してタイトルが空だった場合の処理
+          if [ -z "$TITLE" ]; then
+            TITLE="（取得できませんでした）"
+          fi
+          
           if [ "${{ job.status }}" != "success" ]; then
             STATUS="失敗 ❌ (GitHub Actionsのログを確認してください)"
           fi
           
+          # jqコマンドで安全にメッセージを作成
+          PAYLOAD=$(jq -n \
+            --arg title "🤖 英語学習記事システム" \
+            --arg msg "本日のnote下書き処理が終わりました。
+            
+          【タイトル】
+          $TITLE" \
+            --arg status "$STATUS" \
+            '{title: $title, message: $msg, status: $status}')
+          
           curl -L -X POST -H "Content-Type: application/json" \
-          -d "{\"title\": \"🤖 英語学習記事システム\", \"message\": \"本日のnote下書き処理が終わりました。\", \"status\": \"$STATUS\"}" \
+          -d "$PAYLOAD" \
           ${{ secrets.GAS_WEBHOOK_URL }}
