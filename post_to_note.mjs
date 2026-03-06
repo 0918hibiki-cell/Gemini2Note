@@ -29,37 +29,62 @@ async function generateArticle() {
     console.log("noteトップページへ移動中...");
     await page.goto('https://note.com/', { waitUntil: 'networkidle', timeout: 60000 });
 
-    console.log("「投稿」ボタンをクリック中...");
+    console.log("投稿ボタンをクリック中...");
     const menuTrigger = page.locator('header button[aria-label="投稿"], .a-split-button__right').first();
     await menuTrigger.waitFor({ state: 'visible', timeout: 15000 });
     await menuTrigger.click({ force: true });
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(3000);
 
     console.log("「テキスト」形式を選択中...");
-    const textOption = page.locator('a[href*="notes/new"], .o-navbarPrimary__postingButton').first();
+    const textOption = page.locator('a[href*="notes/new"], a[href*="editor.note.com"], .o-navbarPrimary__postingButton').first();
     await textOption.click({ force: true });
 
-    // 💡 修正ポイント：新ドメイン "editor.note.com" を待ち受けに加える
     console.log("新エディタの読み込みを待機中...");
-    await page.waitForURL(/editor\.note\.com\/new|notes\/new/, { timeout: 30000 });
+    await page.waitForURL(/editor\.note\.com\/new/, { timeout: 30000 });
+    // エディタの初期化を待つ
+    await page.waitForTimeout(5000);
+
+    // 💡 新エディタの「タイトル」を多角的に探索
+    console.log("タイトルを入力中...");
+    const titleSelectors = [
+      'h1[contenteditable="true"]',
+      '.note-editor-title__input',
+      'textarea[placeholder*="タイトル"]',
+      'div[role="textbox"]:near(h1)',
+      '.editor-title'
+    ];
     
-    // 💡 新エディタに対応した汎用セレクタ
-    const titleArea = page.locator('textarea[placeholder*="タイトル"], .note-editor-title__input').first();
-    await titleArea.waitFor({ state: 'visible', timeout: 20000 });
-    await titleArea.fill(title);
-    
-    const bodyArea = page.locator('.note-common-editor__editable, [role="textbox"], .ProseMirror').first();
-    await bodyArea.waitFor({ state: 'visible' });
+    let titleField = null;
+    for (const sel of titleSelectors) {
+      try {
+        titleField = page.locator(sel).first();
+        if (await titleField.isVisible({ timeout: 2000 })) break;
+      } catch (e) { continue; }
+    }
+
+    // もしセレクタで見つからない場合は、タブキーで移動して入力（力技）
+    if (!titleField || !(await titleField.isVisible())) {
+      console.log("セレクタで見つからないため、キーボード操作を試行します...");
+      await page.keyboard.press('Tab');
+      await page.keyboard.type(title, { delay: 50 });
+    } else {
+      await titleField.click();
+      await titleField.fill(title);
+    }
+
+    // 💡 本文の入力
+    console.log("本文を入力中...");
+    const bodyArea = page.locator('.note-common-editor__editable, .ProseMirror, [contenteditable="true"]').nth(1);
+    await bodyArea.waitFor({ state: 'visible', timeout: 10000 });
+    await bodyArea.click();
     await bodyArea.fill(body);
-    console.log("記事の内容を入力しました。");
 
     console.log("下書きとして保存中...");
-    // 保存ボタンもより確実に（n-button--primary など）
-    const saveButton = page.locator('button:has-text("保存"), .n-button--primary').first();
+    const saveButton = page.locator('button:has-text("保存"), .n-button--primary, button.n-button--variant-primary').first();
     await saveButton.click();
     
     await page.waitForTimeout(10000);
-    console.log(`🎉 ミッション完了！ noteに下書きが保存されました: ${title}`);
+    console.log(`🎉 成功！ noteに下書きが保存されました: ${title}`);
 
   } catch (e) {
     console.error("❌ 失敗:", e.message);
