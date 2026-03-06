@@ -3,7 +3,6 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 async function generateArticle() {
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  // モデル名や関数定義は過去の成功例に基づき完全に固定
   const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
   const prompt = `
@@ -34,14 +33,14 @@ Select one topic from:
 (Dialogue in English: Use "> " for each speaker's line. The speaker's name and the colon MUST be bolded, like "**Name:** ". Ensure the dialogue is engaging and relatable.)
 
 ## 最重要フレーズ Top 3
-(Format strictly as follows. ONLY the first item should start with "1. ". Do NOT write "2. ", "3. " for the others, because the editor will auto-number them. ONLY the English phrase should be bolded.)
+(Format strictly as follows. ONLY the first item should start with "1. ". Do NOT write "2. ", "3. " for the others. ONLY the English phrase should be bolded.)
 1. **[English Phrase]**: [Japanese Meaning] / [Short logical/scientific context or explanation in Japanese, 1-2 sentences]
 **[English Phrase]**: [Japanese Meaning] / [Short logical/scientific context or explanation in Japanese, 1-2 sentences]
 **[English Phrase]**: [Japanese Meaning] / [Short logical/scientific context or explanation in Japanese, 1-2 sentences]
 
 ## 読解クイズ
-(3-choice question in Japanese based on the story. Use A, B, C for the choices.)
-[Question text]
+(3-choice question in Japanese based on the story. Use A, B, C for the choices. The question text MUST be bolded.)
+**[Question text]**
 A. [Choice A text]
 B. [Choice B text]
 C. [Choice C text]
@@ -53,7 +52,7 @@ C. [Choice C text]
 (Natural Japanese translation of the dialogue. Use "> " for each speaker's line. The speaker's name and the colon MUST be bolded, like "**Name:** ", to match the English format.)
 
 ## 重要語彙フルリスト
-(Up to 7 phrases. Format strictly as follows. ONLY the first item should start with "1. ". Do NOT write "2. ", "3. " etc. for the others. ONLY the English word should be bolded.)
+(Up to 7 phrases. MUST be completely different from the phrases used in "最重要フレーズ Top 3". Do not overlap. Format strictly as follows. ONLY the first item should start with "1. ". Do NOT write "2. ", "3. " etc. for the others. ONLY the English word should be bolded.)
 1. **[English Word]**: [Japanese Meaning] / [Business usage tip or example in Japanese]
 **[English Word]**: [Japanese Meaning] / [Business usage tip or example in Japanese]
 (Continue for up to 7 words, without typing numbers for them...)
@@ -62,8 +61,8 @@ C. [Choice C text]
 (Japanese column: Soft scientific/logical insight. No complex formulas.)
 
 ## クイズの解説
-(Format strictly as follows. Restate the question and choices A, B, C using "> ".)
-> [Question text]
+(Format strictly as follows. Restate the question and choices using "> ". The question text MUST be bolded.)
+> **[Question text]**
 > A. [Choice A text]
 > B. [Choice B text]
 > C. [Choice C text]
