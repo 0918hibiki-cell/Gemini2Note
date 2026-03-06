@@ -3,11 +3,9 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 /**
  * 1. 記事生成関数：Logic Link English Coach モード
- * 構成、有料ライン、装飾タグ（##, >）を厳密に制御します。
  */
 async function generateArticle() {
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  // 安定動作が確認されている2026年現在の最新モデルを指定
   const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
   const prompt = `
@@ -23,7 +21,7 @@ Select one topic from:
 
 [Formatting Rules for note.com]
 - Headings: Use "## " (with a space) at the start of the line.
-- Quotes/Dialogue: Use "> " (with a space) at the start of every line of dialogue.
+- Quotes/Dialogue/Quiz Restatement: Use "> " (with a space) at the start of every line you want to quote.
 - Bold: Use "**" to surround bold words (e.g., **word**).
 - Paid Line: Use "--- PAID LINE ---" as a separator.
 - Title: First line should be the title ONLY (in Japanese, format: [Problem/Hook] × [Logic/Math/Science term]).
@@ -38,7 +36,9 @@ Select one topic from:
 (Dialogue in English: Use "> " for each speaker's line. Ensure the dialogue is engaging and relatable.)
 
 ## 最重要フレーズ Top 3
-(3 key phrases with Japanese meanings and short logical context.)
+(Format strictly as follows for each of the 3 phrases. DO NOT use numbers like 1., 2., 3.)
+**[English Phrase]（[Japanese Meaning]）**
+[Short logical/scientific context or explanation in Japanese, 1-2 sentences.]
 
 ## 読解クイズ
 (3-choice question in Japanese based on the story.)
@@ -50,13 +50,14 @@ Select one topic from:
 (Natural Japanese translation of the dialogue.)
 
 ## 重要語彙フルリスト
-(Up to 7 phrases including usage tips for business.)
+(Up to 7 phrases. Format strictly as: "1. **Word** : Meaning / Business usage tip". Do not use confusing numbering.)
 
 ## ロジカル・ディープダイブ
 (Japanese column: Soft scientific/logical insight. No complex formulas.)
 
 ## クイズの解説
-(Logical reasoning for the correct answer.)
+(First, restate the quiz question precisely using "> " at the beginning of the line.)
+(Then, provide the logical reasoning for the correct answer.)
 `;
 
   try {
@@ -65,7 +66,7 @@ Select one topic from:
     // 空行を排除しつつパース
     const lines = text.split('\n').filter(l => l.trim() !== "");
     
-    // 1行目をタイトルとして抽出（マークダウン記号などを除去）
+    // 1行目をタイトルとして抽出
     const title = lines[0].replace(/[*#]/g, '').replace('タイトル：', '').trim();
     const bodyLines = lines.slice(1);
     
@@ -98,12 +99,10 @@ Select one topic from:
     console.log("エディタへ移動中...");
     await page.goto('https://note.com/notes/new?type=text', { waitUntil: 'networkidle', timeout: 60000 });
 
-    // ロード完了を待機
     const titleArea = page.locator('h1[contenteditable="true"], .note-editor-title__input, textarea[placeholder*="タイトル"]').first();
     await titleArea.waitFor({ state: 'visible', timeout: 60000 });
     await page.waitForTimeout(3000);
 
-    // タイトル入力
     console.log("タイトルを入力中...");
     await titleArea.click();
     await page.keyboard.type(title, { delay: 50 });
@@ -113,27 +112,16 @@ Select one topic from:
     console.log("本文を入力中（装飾トリガーを処理）...");
     for (const line of bodyLines) {
       if (line.startsWith('## ')) {
-        // 💡 見出しの前：2回Enterで確実にブロックを分離
-        await page.keyboard.press('Enter');
-        await page.keyboard.press('Enter');
-        
         await page.keyboard.type('## ', { delay: 100 });
-        await page.waitForTimeout(1000); // noteエディタの見出し変換待ち
+        await page.waitForTimeout(1000);
         await page.keyboard.type(line.replace('## ', ''));
-        
-        // 💡 見出しの後：2回Enterで平文へ戻す
         await page.keyboard.press('Enter');
-        await page.keyboard.press('Enter');
-        
       } else if (line.startsWith('> ')) {
-        // 💡 引用の開始
         await page.keyboard.type('> ', { delay: 100 });
-        await page.waitForTimeout(800); // noteエディタの引用ブロック変換待ち
+        await page.waitForTimeout(800);
         await page.keyboard.type(line.replace('> ', ''));
         await page.keyboard.press('Enter');
-        
       } else {
-        // 通常のテキスト入力
         await page.keyboard.type(line, { delay: 10 });
         await page.keyboard.press('Enter');
       }
